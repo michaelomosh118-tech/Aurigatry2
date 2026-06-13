@@ -78,6 +78,9 @@ export default defineConfig({
         ]
       : []),
   ],
+  optimizeDeps: {
+    exclude: ["@huggingface/transformers"],
+  },
   resolve: {
     alias: {
       "@": path.resolve(import.meta.dirname, "src"),

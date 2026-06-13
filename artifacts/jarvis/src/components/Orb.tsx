@@ -16,7 +16,7 @@ export function Orb({ state }: OrbProps) {
         "0 0 30px 10px rgba(0, 255, 255, 0.4)",
         "0 0 20px 5px rgba(0, 255, 255, 0.2)"
       ],
-      transition: { duration: 4, repeat: Infinity, ease: "easeInOut" }
+      transition: { duration: 4, repeat: Infinity, ease: "easeInOut" as const }
     },
     listening: {
       scale: [1, 1.2, 1.1, 1.2],
@@ -27,7 +27,7 @@ export function Orb({ state }: OrbProps) {
         "0 0 40px 15px rgba(0, 255, 255, 0.6)",
         "0 0 60px 20px rgba(0, 255, 255, 0.8)"
       ],
-      transition: { duration: 1.5, repeat: Infinity, ease: "easeInOut" }
+      transition: { duration: 1.5, repeat: Infinity, ease: "easeInOut" as const }
     },
     thinking: {
       scale: [1.1, 1.15, 1.1],
@@ -38,10 +38,10 @@ export function Orb({ state }: OrbProps) {
         "0 0 50px 15px rgba(0, 150, 255, 0.8), inset 0 0 30px rgba(255, 255, 255, 0.8)",
         "0 0 40px 10px rgba(0, 200, 255, 0.6), inset 0 0 20px rgba(255, 255, 255, 0.5)"
       ],
-      transition: { 
-        rotate: { duration: 3, repeat: Infinity, ease: "linear" },
-        scale: { duration: 2, repeat: Infinity, ease: "easeInOut" },
-        boxShadow: { duration: 2, repeat: Infinity, ease: "easeInOut" }
+      transition: {
+        rotate: { duration: 3, repeat: Infinity, ease: "linear" as const },
+        scale: { duration: 2, repeat: Infinity, ease: "easeInOut" as const },
+        boxShadow: { duration: 2, repeat: Infinity, ease: "easeInOut" as const }
       }
     },
     speaking: {
@@ -53,7 +53,7 @@ export function Orb({ state }: OrbProps) {
         "0 0 30px 10px rgba(0, 255, 255, 0.5)",
         "0 0 70px 25px rgba(0, 255, 255, 0.8)"
       ],
-      transition: { duration: 0.5, repeat: Infinity, ease: "easeInOut" }
+      transition: { duration: 0.5, repeat: Infinity, ease: "easeInOut" as const }
     },
     error: {
       scale: 1,
@@ -66,7 +66,7 @@ export function Orb({ state }: OrbProps) {
       scale: [0.8, 1, 0.8],
       opacity: [0.3, 0.6, 0.3],
       boxShadow: "0 0 10px 2px rgba(0, 255, 255, 0.2)",
-      transition: { duration: 3, repeat: Infinity, ease: "easeInOut" }
+      transition: { duration: 3, repeat: Infinity, ease: "easeInOut" as const }
     }
   };
 

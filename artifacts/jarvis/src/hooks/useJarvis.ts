@@ -8,22 +8,24 @@ export type Message = {
   content: string;
 };
 
+export type BackendType = "webgpu" | "wasm" | null;
+
 const SYSTEM_PROMPT =
   "You are Jarvis, a sophisticated AI assistant. Be helpful, concise, and slightly formal — like a butler with excellent knowledge. Keep responses under 3 sentences unless more detail is specifically requested.";
 
-// q4f16_1 kernels require 32KB workgroup storage (incompatible with mobile GPUs that limit to 16KB).
-// q0f16 models have no dequant kernels and stay within 16KB — safe on all devices.
-// We try best→smallest; the first one that loads wins.
-const MODEL_CASCADE = [
+// WebGPU models: q4f16_1 needs 32KB workgroup — fails on mobile GPUs limited to 16KB
+const WEBGPU_MODELS = [
   "Phi-3.5-mini-instruct-q4f16_1-MLC",
   "SmolLM2-360M-Instruct-q0f16-MLC",
   "SmolLM2-135M-Instruct-q0f16-MLC",
 ];
 
-const MOBILE_MODELS = new Set([
-  "SmolLM2-360M-Instruct-q0f16-MLC",
-  "SmolLM2-135M-Instruct-q0f16-MLC",
-]);
+// WASM/CPU model: runs via WebAssembly, no GPU required — works on any device
+const WASM_MODEL = "onnx-community/Qwen2.5-0.5B-Instruct-ONNX";
+
+type UnifiedEngine =
+  | { type: "webgpu"; engine: webllm.MLCEngineInterface }
+  | { type: "wasm"; pipe: (messages: object[], options: object) => Promise<unknown>; tokenizer: unknown };
 
 export function useJarvis() {
   const [state, setState] = useState<AppState>("loading");
@@ -34,54 +36,103 @@ export function useJarvis() {
   const [streamingResponse, setStreamingResponse] = useState("");
   const [errorDetails, setErrorDetails] = useState<string | null>(null);
   const [modelId, setModelId] = useState<string>("");
-  const [isMobileModel, setIsMobileModel] = useState(false);
+  const [backend, setBackend] = useState<BackendType>(null);
 
-  const engineRef = useRef<webllm.MLCEngineInterface | null>(null);
+  const engineRef = useRef<UnifiedEngine | null>(null);
 
   useEffect(() => {
     let mounted = true;
 
-    async function initEngine() {
-      if (!navigator.gpu) {
-        if (mounted) {
-          setState("error");
-          setErrorDetails("WebGPU is not supported. Please use Chrome 113+ on desktop or Android Chrome.");
-        }
-        return;
-      }
+    async function tryWebGPU(): Promise<boolean> {
+      if (!(navigator as Navigator & { gpu?: unknown }).gpu) return false;
 
-      for (const candidate of MODEL_CASCADE) {
-        if (!mounted) return;
-
+      for (const candidate of WEBGPU_MODELS) {
+        if (!mounted) return false;
         try {
           if (mounted) {
             setModelId(candidate);
-            setIsMobileModel(MOBILE_MODELS.has(candidate));
             setProgress({ text: `Loading ${candidate.replace("-MLC", "")}...`, progress: 0 });
           }
-
           const engine = await webllm.CreateMLCEngine(candidate, {
             initProgressCallback: (p) => {
               if (mounted) setProgress({ text: p.text, progress: p.progress });
             },
           });
-
           if (mounted) {
-            engineRef.current = engine;
+            engineRef.current = { type: "webgpu", engine };
+            setBackend("webgpu");
             setState("idle");
           }
-          return; // loaded successfully — stop cascade
-        } catch (err: unknown) {
+          return true;
+        } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
-          console.warn(`[Jarvis] ${candidate} failed: ${msg}. Trying next model...`);
-          // continue to next candidate
+          console.warn(`[Jarvis] WebGPU model ${candidate} failed: ${msg}`);
         }
       }
+      return false;
+    }
 
-      // All models failed
-      if (mounted) {
-        setState("error");
-        setErrorDetails("Could not load any compatible model on this device. Try Chrome on a desktop or a newer Android device with WebGPU support.");
+    async function tryWASM(): Promise<boolean> {
+      if (!mounted) return false;
+      try {
+        if (mounted) {
+          setModelId(WASM_MODEL);
+          setBackend("wasm");
+          setProgress({ text: "Loading CPU model (no GPU needed)...", progress: 0 });
+        }
+
+        const { pipeline, TextStreamer } = await import("@huggingface/transformers");
+
+        const pipe = await pipeline(
+          "text-generation",
+          WASM_MODEL,
+          {
+            dtype: "q4",
+            device: "wasm",
+            progress_callback: (p: { status: string; file?: string; progress?: number }) => {
+              if (!mounted) return;
+              if (p.status === "progress" && p.file) {
+                setProgress({
+                  text: `Downloading ${p.file}...`,
+                  progress: (p.progress ?? 0) / 100,
+                });
+              } else if (p.status === "done") {
+                setProgress({ text: "Model ready", progress: 1 });
+              }
+            },
+          }
+        );
+
+        if (mounted) {
+          engineRef.current = {
+            type: "wasm",
+            pipe: pipe as (messages: object[], options: object) => Promise<unknown>,
+            tokenizer: (pipe as { tokenizer: unknown }).tokenizer,
+          };
+          setState("idle");
+        }
+
+        // Store TextStreamer constructor for later use
+        (engineRef.current as { TextStreamer?: unknown }).TextStreamer = TextStreamer;
+        return true;
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.error(`[Jarvis] WASM fallback failed: ${msg}`);
+        return false;
+      }
+    }
+
+    async function initEngine() {
+      const gpuOk = await tryWebGPU();
+      if (!gpuOk && mounted) {
+        setProgress({ text: "GPU unavailable — switching to CPU mode...", progress: 0 });
+        const wasmOk = await tryWASM();
+        if (!wasmOk && mounted) {
+          setState("error");
+          setErrorDetails(
+            "Could not initialize the AI engine on this device. Make sure you are using a recent version of Chrome or Safari."
+          );
+        }
       }
     }
 
@@ -106,19 +157,47 @@ export function useJarvis() {
       setMessages(newMessages);
 
       try {
-        const stream = await engineRef.current.chat.completions.create({
-          messages: newMessages.slice(-10),
-          stream: true,
-          max_tokens: 512,
-        });
-
+        const ctx = newMessages.slice(-10);
         let fullResponse = "";
-        setState("speaking");
 
-        for await (const chunk of stream) {
-          const delta = chunk.choices[0]?.delta?.content || "";
-          fullResponse += delta;
-          setStreamingResponse(fullResponse);
+        if (engineRef.current.type === "webgpu") {
+          setState("speaking");
+          const stream = await engineRef.current.engine.chat.completions.create({
+            messages: ctx,
+            stream: true,
+            max_tokens: 512,
+          });
+          for await (const chunk of stream) {
+            const delta = chunk.choices[0]?.delta?.content || "";
+            fullResponse += delta;
+            setStreamingResponse(fullResponse);
+          }
+        } else {
+          // WASM path — use TextStreamer for token-by-token output
+          setState("speaking");
+          const { TextStreamer } = await import("@huggingface/transformers");
+          const wasmEngine = engineRef.current;
+
+          const streamer = new TextStreamer(
+            (wasmEngine as { tokenizer: ConstructorParameters<typeof TextStreamer>[0] }).tokenizer,
+            {
+              skip_prompt: true,
+              skip_special_tokens: true,
+              callback_function: (text: string) => {
+                fullResponse += text;
+                setStreamingResponse(fullResponse);
+              },
+            }
+          );
+
+          await wasmEngine.pipe(
+            ctx.map((m) => ({ role: m.role, content: m.content })),
+            {
+              max_new_tokens: 256,
+              streamer,
+              do_sample: false,
+            }
+          );
         }
 
         setMessages([...newMessages, { role: "assistant", content: fullResponse }]);
@@ -150,6 +229,7 @@ export function useJarvis() {
     sendMessage,
     clearHistory,
     modelId,
-    isMobileModel,
+    isMobileModel: backend === "wasm",
+    backend,
   };
 }

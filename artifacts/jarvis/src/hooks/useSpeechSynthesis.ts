@@ -6,20 +6,20 @@ export function useSpeechSynthesis() {
   const [isSupported, setIsSupported] = useState(false);
   
   useEffect(() => {
-    if (typeof window !== "undefined" && window.speechSynthesis) {
-      setIsSupported(true);
-      
-      const loadVoices = () => {
-        setVoices(window.speechSynthesis.getVoices());
-      };
-      
-      loadVoices();
-      window.speechSynthesis.onvoiceschanged = loadVoices;
-      
-      return () => {
-        window.speechSynthesis.onvoiceschanged = null;
-      };
-    }
+    if (typeof window === "undefined" || !window.speechSynthesis) return undefined;
+
+    setIsSupported(true);
+
+    const loadVoices = () => {
+      setVoices(window.speechSynthesis.getVoices());
+    };
+
+    loadVoices();
+    window.speechSynthesis.onvoiceschanged = loadVoices;
+
+    return () => {
+      window.speechSynthesis.onvoiceschanged = null;
+    };
   }, []);
 
   const speak = useCallback((text: string, options: { rate?: number; pitch?: number; volume?: number; onEnd?: () => void } = {}) => {
