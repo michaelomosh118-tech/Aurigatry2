@@ -11,22 +11,24 @@ export type Message = {
 const SYSTEM_PROMPT =
   "You are Jarvis, a sophisticated AI assistant. Be helpful, concise, and slightly formal — like a butler with excellent knowledge. Keep responses under 3 sentences unless more detail is specifically requested.";
 
-const DESKTOP_MODEL = "Phi-3.5-mini-instruct-q4f16_1-MLC";
-const MOBILE_MODEL = "Qwen2.5-0.5B-Instruct-q4f16_1-MLC";
+// q4f16_1 models require 32KB workgroup storage — incompatible with mobile GPUs (limit=16384).
+// q0f16 models use f16 weights with no quantization dequant kernels, so workgroup storage stays within 16KB.
+const MODEL_CASCADE = [
+  "Phi-3.5-mini-instruct-q4f16_1-MLC",   // Best quality, desktop (needs 32KB)
+  "SmolLM2-360M-Instruct-q0f16-MLC",     // Mobile-safe: q0f16 = no dequant kernels (16KB ok)
+  "SmolLM2-135M-Instruct-q0f16-MLC",     // Smallest fallback
+];
+
 const MOBILE_WORKGROUP_LIMIT = 16384;
 
-async function selectModel(): Promise<{ modelId: string; isMobile: boolean }> {
+async function isMobileGPU(): Promise<boolean> {
   try {
     const adapter = await navigator.gpu.requestAdapter();
-    if (!adapter) return { modelId: DESKTOP_MODEL, isMobile: false };
-    const limit = adapter.limits.maxComputeWorkgroupStorageSize;
-    if (limit <= MOBILE_WORKGROUP_LIMIT) {
-      return { modelId: MOBILE_MODEL, isMobile: true };
-    }
+    if (!adapter) return false;
+    return adapter.limits.maxComputeWorkgroupStorageSize <= MOBILE_WORKGROUP_LIMIT;
   } catch {
-    // If we can't query limits, assume desktop
+    return false;
   }
-  return { modelId: DESKTOP_MODEL, isMobile: false };
 }
 
 export function useJarvis() {
@@ -49,28 +51,44 @@ export function useJarvis() {
       try {
         if (!navigator.gpu) {
           throw new Error(
-            "WebGPU is not supported in this browser. Please use Chrome 113+ on desktop or Android."
+            "WebGPU is not supported. Please use Chrome 113+ on desktop or Android."
           );
         }
 
-        const { modelId: selectedModel, isMobile } = await selectModel();
-        if (mounted) {
-          setModelId(selectedModel);
-          setIsMobileModel(isMobile);
-        }
+        const mobile = await isMobileGPU();
+        // Start from the first mobile-safe model when on mobile, otherwise try all
+        const startIndex = mobile ? 1 : 0;
+        const candidates = MODEL_CASCADE.slice(startIndex);
 
-        const engine = await webllm.CreateMLCEngine(selectedModel, {
-          initProgressCallback: (p) => {
+        let lastError: Error | null = null;
+
+        for (const candidate of candidates) {
+          try {
             if (mounted) {
-              setProgress({ text: p.text, progress: p.progress });
+              setModelId(candidate);
+              setIsMobileModel(mobile || startIndex > 0);
+              setProgress({ text: `Loading ${candidate.split("-MLC")[0]}...`, progress: 0 });
             }
-          },
-        });
 
-        if (mounted) {
-          engineRef.current = engine;
-          setState("idle");
+            const engine = await webllm.CreateMLCEngine(candidate, {
+              initProgressCallback: (p) => {
+                if (mounted) setProgress({ text: p.text, progress: p.progress });
+              },
+            });
+
+            if (mounted) {
+              engineRef.current = engine;
+              setState("idle");
+            }
+            return; // success — stop cascade
+          } catch (err: unknown) {
+            lastError = err instanceof Error ? err : new Error(String(err));
+            console.warn(`Model ${candidate} failed, trying next...`, lastError.message);
+          }
         }
+
+        // All candidates exhausted
+        throw lastError ?? new Error("All models failed to load.");
       } catch (err: unknown) {
         console.error("Failed to initialize engine:", err);
         if (mounted) {
