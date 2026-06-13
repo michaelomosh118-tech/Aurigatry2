@@ -11,25 +11,19 @@ export type Message = {
 const SYSTEM_PROMPT =
   "You are Jarvis, a sophisticated AI assistant. Be helpful, concise, and slightly formal — like a butler with excellent knowledge. Keep responses under 3 sentences unless more detail is specifically requested.";
 
-// q4f16_1 models require 32KB workgroup storage — incompatible with mobile GPUs (limit=16384).
-// q0f16 models use f16 weights with no quantization dequant kernels, so workgroup storage stays within 16KB.
+// q4f16_1 kernels require 32KB workgroup storage (incompatible with mobile GPUs that limit to 16KB).
+// q0f16 models have no dequant kernels and stay within 16KB — safe on all devices.
+// We try best→smallest; the first one that loads wins.
 const MODEL_CASCADE = [
-  "Phi-3.5-mini-instruct-q4f16_1-MLC",   // Best quality, desktop (needs 32KB)
-  "SmolLM2-360M-Instruct-q0f16-MLC",     // Mobile-safe: q0f16 = no dequant kernels (16KB ok)
-  "SmolLM2-135M-Instruct-q0f16-MLC",     // Smallest fallback
+  "Phi-3.5-mini-instruct-q4f16_1-MLC",
+  "SmolLM2-360M-Instruct-q0f16-MLC",
+  "SmolLM2-135M-Instruct-q0f16-MLC",
 ];
 
-const MOBILE_WORKGROUP_LIMIT = 16384;
-
-async function isMobileGPU(): Promise<boolean> {
-  try {
-    const adapter = await navigator.gpu.requestAdapter();
-    if (!adapter) return false;
-    return adapter.limits.maxComputeWorkgroupStorageSize <= MOBILE_WORKGROUP_LIMIT;
-  } catch {
-    return false;
-  }
-}
+const MOBILE_MODELS = new Set([
+  "SmolLM2-360M-Instruct-q0f16-MLC",
+  "SmolLM2-135M-Instruct-q0f16-MLC",
+]);
 
 export function useJarvis() {
   const [state, setState] = useState<AppState>("loading");
@@ -48,55 +42,46 @@ export function useJarvis() {
     let mounted = true;
 
     async function initEngine() {
-      try {
-        if (!navigator.gpu) {
-          throw new Error(
-            "WebGPU is not supported. Please use Chrome 113+ on desktop or Android."
-          );
-        }
-
-        const mobile = await isMobileGPU();
-        // Start from the first mobile-safe model when on mobile, otherwise try all
-        const startIndex = mobile ? 1 : 0;
-        const candidates = MODEL_CASCADE.slice(startIndex);
-
-        let lastError: Error | null = null;
-
-        for (const candidate of candidates) {
-          try {
-            if (mounted) {
-              setModelId(candidate);
-              setIsMobileModel(mobile || startIndex > 0);
-              setProgress({ text: `Loading ${candidate.split("-MLC")[0]}...`, progress: 0 });
-            }
-
-            const engine = await webllm.CreateMLCEngine(candidate, {
-              initProgressCallback: (p) => {
-                if (mounted) setProgress({ text: p.text, progress: p.progress });
-              },
-            });
-
-            if (mounted) {
-              engineRef.current = engine;
-              setState("idle");
-            }
-            return; // success — stop cascade
-          } catch (err: unknown) {
-            lastError = err instanceof Error ? err : new Error(String(err));
-            console.warn(`Model ${candidate} failed, trying next...`, lastError.message);
-          }
-        }
-
-        // All candidates exhausted
-        throw lastError ?? new Error("All models failed to load.");
-      } catch (err: unknown) {
-        console.error("Failed to initialize engine:", err);
+      if (!navigator.gpu) {
         if (mounted) {
           setState("error");
-          setErrorDetails(
-            err instanceof Error ? err.message : "Failed to initialize WebGPU LLM."
-          );
+          setErrorDetails("WebGPU is not supported. Please use Chrome 113+ on desktop or Android Chrome.");
         }
+        return;
+      }
+
+      for (const candidate of MODEL_CASCADE) {
+        if (!mounted) return;
+
+        try {
+          if (mounted) {
+            setModelId(candidate);
+            setIsMobileModel(MOBILE_MODELS.has(candidate));
+            setProgress({ text: `Loading ${candidate.replace("-MLC", "")}...`, progress: 0 });
+          }
+
+          const engine = await webllm.CreateMLCEngine(candidate, {
+            initProgressCallback: (p) => {
+              if (mounted) setProgress({ text: p.text, progress: p.progress });
+            },
+          });
+
+          if (mounted) {
+            engineRef.current = engine;
+            setState("idle");
+          }
+          return; // loaded successfully — stop cascade
+        } catch (err: unknown) {
+          const msg = err instanceof Error ? err.message : String(err);
+          console.warn(`[Jarvis] ${candidate} failed: ${msg}. Trying next model...`);
+          // continue to next candidate
+        }
+      }
+
+      // All models failed
+      if (mounted) {
+        setState("error");
+        setErrorDetails("Could not load any compatible model on this device. Try Chrome on a desktop or a newer Android device with WebGPU support.");
       }
     }
 
@@ -143,9 +128,7 @@ export function useJarvis() {
       } catch (err: unknown) {
         console.error("Chat completion error:", err);
         setState("error");
-        setErrorDetails(
-          err instanceof Error ? err.message : "Failed to generate response."
-        );
+        setErrorDetails(err instanceof Error ? err.message : "Failed to generate response.");
         return null;
       }
     },
