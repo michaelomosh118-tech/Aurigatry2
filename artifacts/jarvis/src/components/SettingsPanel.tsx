@@ -12,6 +12,7 @@ interface SettingsPanelProps {
   setVoiceSpeed: (v: number) => void;
   onClear: () => void;
   modelId: string;
+  isMobileModel: boolean;
 }
 
 export function SettingsPanel({
@@ -20,7 +21,8 @@ export function SettingsPanel({
   voiceSpeed,
   setVoiceSpeed,
   onClear,
-  modelId
+  modelId,
+  isMobileModel,
 }: SettingsPanelProps) {
   return (
     <Sheet>
@@ -74,6 +76,11 @@ export function SettingsPanel({
               <span className="text-muted-foreground">Model</span>
               <span className="font-mono text-foreground">{modelId.replace("-MLC", "")}</span>
             </div>
+            {isMobileModel && (
+              <div className="text-xs text-yellow-400/80 bg-yellow-400/10 border border-yellow-400/20 rounded px-2 py-1 font-mono">
+                Mobile-optimized model active (GPU limit detected)
+              </div>
+            )}
             <div className="flex justify-between text-xs">
               <span className="text-muted-foreground">Hardware</span>
               <span className="font-mono text-green-400">WebGPU Native</span>

@@ -160,6 +160,7 @@ export default function Home() {
           setVoiceSpeed={setVoiceSpeed}
           onClear={jarvis.clearHistory}
           modelId={jarvis.modelId}
+          isMobileModel={jarvis.isMobileModel}
         />
       </header>
 
