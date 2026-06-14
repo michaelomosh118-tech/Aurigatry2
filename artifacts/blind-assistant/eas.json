@@ -4,13 +4,22 @@
     "appVersionSource": "local"
   },
   "build": {
+    "base": {
+      "node": "20.20.2",
+      "cache": {
+        "key": "v1"
+      }
+    },
     "preview": {
+      "extends": "base",
       "distribution": "internal",
       "android": {
-        "buildType": "apk"
+        "buildType": "apk",
+        "gradleCommand": ":app:assembleRelease"
       }
     },
     "production": {
+      "extends": "base",
       "android": {
         "buildType": "app-bundle"
       }

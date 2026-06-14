@@ -71,7 +71,11 @@ autoInstallPeers: false
 onlyBuiltDependencies:
   - '@swc/core'
   - esbuild
+  - llama.rn
   - msw
+  - onnxruntime-node
+  - protobufjs
+  - sharp
   - unrs-resolver
 
 overrides:
