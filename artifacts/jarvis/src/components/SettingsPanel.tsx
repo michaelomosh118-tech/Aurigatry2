@@ -1,12 +1,11 @@
 import { useState } from "react";
-import { Settings, Volume2, Trash2, Cpu, Cloud, Wifi, WifiOff } from "lucide-react";
+import { Settings, Volume2, Trash2, Key, LogOut } from "lucide-react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
-import type { BackendType } from "@/hooks/useJarvis";
 
 interface SettingsPanelProps {
   voiceEnabled: boolean;
@@ -14,11 +13,8 @@ interface SettingsPanelProps {
   voiceSpeed: number;
   setVoiceSpeed: (v: number) => void;
   onClear: () => void;
-  modelId: string;
-  backend: BackendType;
   groqKey: string;
   onGroqKeySave: (key: string) => void;
-  onSwitchToOffline: () => void;
 }
 
 export function SettingsPanel({
@@ -27,24 +23,11 @@ export function SettingsPanel({
   voiceSpeed,
   setVoiceSpeed,
   onClear,
-  modelId,
-  backend,
   groqKey,
   onGroqKeySave,
-  onSwitchToOffline,
 }: SettingsPanelProps) {
   const [keyInput, setKeyInput] = useState(groqKey);
   const [showKey, setShowKey] = useState(false);
-
-  const handleSaveKey = () => {
-    const trimmed = keyInput.trim();
-    if (trimmed) onGroqKeySave(trimmed);
-  };
-
-  const handleClearKey = () => {
-    setKeyInput("");
-    onSwitchToOffline();
-  };
 
   return (
     <Sheet>
@@ -66,12 +49,12 @@ export function SettingsPanel({
         </SheetHeader>
 
         <div className="space-y-8 mt-4">
-          {/* Voice Output */}
+          {/* Voice */}
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Volume2 className="w-4 h-4 text-muted-foreground" />
-                <Label className="text-sm font-medium text-foreground">Voice Output</Label>
+                <Label className="text-sm font-medium">Voice Output</Label>
               </div>
               <Switch
                 checked={voiceEnabled}
@@ -79,7 +62,6 @@ export function SettingsPanel({
                 data-testid="switch-voice-enabled"
               />
             </div>
-
             <div className="space-y-3 pt-2">
               <div className="flex justify-between">
                 <Label className="text-xs text-muted-foreground">Speech Rate</Label>
@@ -98,50 +80,12 @@ export function SettingsPanel({
             </div>
           </div>
 
-          {/* Engine Info */}
+          {/* API Key */}
           <div className="space-y-3 bg-secondary/30 p-4 rounded-lg border border-white/5">
-            <div className="flex items-center gap-2 text-primary mb-2">
-              <Cpu className="w-4 h-4" />
-              <h3 className="text-sm font-semibold">Engine Status</h3>
+            <div className="flex items-center gap-2 text-primary mb-1">
+              <Key className="w-4 h-4" />
+              <h3 className="text-sm font-semibold">Groq API Key</h3>
             </div>
-            <div className="flex justify-between text-xs">
-              <span className="text-muted-foreground">Model</span>
-              <span className="font-mono text-foreground text-right max-w-[160px] truncate">
-                {modelId.replace("-MLC", "") || "—"}
-              </span>
-            </div>
-            <div className="flex justify-between text-xs">
-              <span className="text-muted-foreground">Mode</span>
-              <span className={`font-mono flex items-center gap-1 ${backend === "groq" ? "text-blue-400" : "text-green-400"}`}>
-                {backend === "groq" ? (
-                  <><Cloud className="w-3 h-3" /> Groq Cloud</>
-                ) : backend === "webgpu" ? (
-                  <><WifiOff className="w-3 h-3" /> Offline / WebGPU</>
-                ) : (
-                  <><Wifi className="w-3 h-3" /> Initializing</>
-                )}
-              </span>
-            </div>
-          </div>
-
-          {/* Groq API Key */}
-          <div className="space-y-3 bg-secondary/30 p-4 rounded-lg border border-white/5">
-            <div className="flex items-center gap-2 text-blue-400 mb-1">
-              <Cloud className="w-4 h-4" />
-              <h3 className="text-sm font-semibold">Groq Cloud Mode</h3>
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Free API key at{" "}
-              <a
-                href="https://console.groq.com"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-blue-400 underline"
-              >
-                console.groq.com
-              </a>
-              . Instant responses, no download needed.
-            </p>
             <div className="flex gap-2">
               <Input
                 type={showKey ? "text" : "password"}
@@ -164,22 +108,23 @@ export function SettingsPanel({
             <div className="flex gap-2">
               <Button
                 size="sm"
-                onClick={handleSaveKey}
+                onClick={() => onGroqKeySave(keyInput)}
                 disabled={!keyInput.trim()}
-                className="flex-1 h-8 text-xs bg-blue-500/20 text-blue-400 border border-blue-500/30 hover:bg-blue-500/30"
+                className="flex-1 h-8 text-xs bg-primary/20 text-primary border border-primary/30 hover:bg-primary/30"
                 data-testid="button-save-groq-key"
               >
-                Use Groq
+                Save Key
               </Button>
               {groqKey && (
                 <Button
                   size="sm"
                   variant="ghost"
-                  onClick={handleClearKey}
+                  onClick={() => { setKeyInput(""); onGroqKeySave(""); }}
                   className="h-8 text-xs text-muted-foreground"
                   data-testid="button-clear-groq-key"
                 >
-                  Clear
+                  <LogOut className="w-3 h-3 mr-1" />
+                  Sign out
                 </Button>
               )}
             </div>
@@ -189,7 +134,7 @@ export function SettingsPanel({
           <div className="pt-4 border-t border-white/10">
             <Button
               variant="destructive"
-              className="w-full bg-destructive/20 text-destructive hover:bg-destructive hover:text-destructive-foreground border border-destructive/50 transition-colors"
+              className="w-full bg-destructive/20 text-destructive hover:bg-destructive hover:text-destructive-foreground border border-destructive/50"
               onClick={onClear}
               data-testid="button-clear-history"
             >
