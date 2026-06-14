@@ -7,20 +7,22 @@
     "base": {
       "node": "20.20.2",
       "cache": {
-        "key": "v1"
+        "key": "v2"
       }
     },
     "preview": {
       "extends": "base",
       "distribution": "internal",
       "android": {
-        "buildType": "apk"
+        "buildType": "apk",
+        "resourceClass": "large"
       }
     },
     "production": {
       "extends": "base",
       "android": {
-        "buildType": "app-bundle"
+        "buildType": "app-bundle",
+        "resourceClass": "large"
       }
     }
   },

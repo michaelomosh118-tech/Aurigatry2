@@ -39,8 +39,8 @@
     "expo-linking": "~8.0.10",
     "expo-location": "~19.0.8",
     "expo-router": "~6.0.17",
-    "expo-splash-screen": "~31.0.12",
     "expo-speech": "~56.0.3",
+    "expo-splash-screen": "~31.0.12",
     "expo-status-bar": "~3.0.9",
     "expo-symbols": "~1.0.8",
     "expo-system-ui": "~6.0.9",
@@ -61,5 +61,7 @@
     "zod": "catalog:",
     "zod-validation-error": "^3.4.0"
   },
-  "dependencies": {}
+  "dependencies": {
+    "expo-build-properties": "^56.0.18"
+  }
 }

@@ -23,8 +23,6 @@ export default {
       permissions: [
         "android.permission.RECORD_AUDIO",
         "android.permission.INTERNET",
-        "android.permission.READ_EXTERNAL_STORAGE",
-        "android.permission.WRITE_EXTERNAL_STORAGE",
       ],
       package: "com.jarvis.offline",
     },
@@ -48,6 +46,18 @@ export default {
         },
       ],
       "expo-font",
+      [
+        "expo-build-properties",
+        {
+          android: {
+            ndkVersion: "27.3.13750724",
+            compileSdkVersion: 35,
+            targetSdkVersion: 35,
+            minSdkVersion: 24,
+            kotlinVersion: "1.9.25",
+          },
+        },
+      ],
     ],
     experiments: {
       typedRoutes: true,
