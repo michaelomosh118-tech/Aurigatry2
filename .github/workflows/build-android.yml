@@ -41,6 +41,8 @@ jobs:
         run: eas build --platform android --profile preview --non-interactive
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+          EAS_PROJECT_ID: ${{ secrets.EAS_PROJECT_ID }}
+          EXPO_OWNER: ${{ secrets.EXPO_OWNER }}
 
       - name: Print download instructions
         run: |
