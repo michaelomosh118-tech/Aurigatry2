@@ -1,7 +1,7 @@
 import {
-  DM_Sans_400Regular,
-  DM_Sans_500Medium,
-  DM_Sans_700Bold,
+  DMSans_400Regular,
+  DMSans_500Medium,
+  DMSans_700Bold,
   useFonts,
 } from "@expo-google-fonts/dm-sans";
 import { Stack } from "expo-router";
@@ -25,9 +25,9 @@ function RootLayoutNav() {
 
 export default function RootLayout() {
   const [fontsLoaded, fontError] = useFonts({
-    DM_Sans_400Regular,
-    DM_Sans_500Medium,
-    DM_Sans_700Bold,
+    DMSans_400Regular,
+    DMSans_500Medium,
+    DMSans_700Bold,
   });
 
   useEffect(() => {

@@ -12,5 +12,13 @@
   "devDependencies": {
     "prettier": "^3.8.3",
     "typescript": "~5.9.3"
+  },
+  "pnpm": {
+    "overrides": {
+      "@expo/config-plugins": "^54.0.4",
+      "@expo/plist": "^0.4.9",
+      "@types/react": "^19.2.0",
+      "@types/react-dom": "^19.2.0"
+    }
   }
 }

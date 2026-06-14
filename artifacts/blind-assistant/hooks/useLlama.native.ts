@@ -26,7 +26,8 @@ export function useLlama() {
   const [errorMessage, setErrorMessage] = useState("");
   const contextRef = useRef<LlamaContext | null>(null);
 
-  const modelPath = `${FileSystem.documentDirectory}${MODEL_FILENAME}`;
+  const documentDirectory: string = (FileSystem as unknown as { documentDirectory: string }).documentDirectory ?? "";
+  const modelPath = `${documentDirectory}${MODEL_FILENAME}`;
 
   const checkModelExists = useCallback(async (): Promise<boolean> => {
     try {
@@ -112,7 +113,7 @@ export function useLlama() {
           ],
           temperature: 0.7,
           top_p: 0.9,
-          max_new_tokens: 256,
+          n_predict: 256,
           stop: ["</s>", "<|im_end|>"],
         },
         (data: { token: string }) => {
