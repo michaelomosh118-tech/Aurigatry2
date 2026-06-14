@@ -1,0 +1,27 @@
+kind = "mobile"
+previewPath = "/blind-assistant/"
+title = "Blind Assistant"
+version = "1.0.0"
+id = "artifacts/blind-assistant"
+router = "expo-domain"
+
+[[integratedSkills]]
+name = "expo"
+version = "1.0.0"
+
+[[services]]
+ensurePreviewReachable = "/status"
+name = "expo"
+paths = [ "/blind-assistant/" ]
+localPort = 21836
+
+[services.development]
+run = "pnpm --filter @workspace/blind-assistant run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/blind-assistant", "run", "build" ]
+run = [ "pnpm", "--filter", "@workspace/blind-assistant", "run", "serve" ]
+
+[services.env]
+PORT = "21836"
+BASE_PATH = "/blind-assistant/"

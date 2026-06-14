@@ -1,0 +1,8 @@
+uploads = []
+outputs = []
+
+[[generated]]
+id = "qe4Ern3tNEwt02kg_kWeM"
+uri = "file://artifacts/blind-assistant/assets/images/icon.png"
+type = "image"
+title = "blind assistant icon"
