@@ -1,0 +1,32 @@
+{
+  "cli": {
+    "version": ">= 12.0.0",
+    "appVersionSource": "local"
+  },
+  "build": {
+    "base": {
+      "node": "20.20.2",
+      "cache": {
+        "key": "v2"
+      }
+    },
+    "preview": {
+      "extends": "base",
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk",
+        "resourceClass": "default"
+      }
+    },
+    "production": {
+      "extends": "base",
+      "android": {
+        "buildType": "app-bundle",
+        "resourceClass": "large"
+      }
+    }
+  },
+  "submit": {
+    "production": {}
+  }
+}
