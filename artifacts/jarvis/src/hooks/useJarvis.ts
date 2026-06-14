@@ -8,24 +8,21 @@ export type Message = {
   content: string;
 };
 
-export type BackendType = "webgpu" | "wasm" | null;
+export type BackendType = "webgpu" | "groq" | null;
 
 const SYSTEM_PROMPT =
   "You are Jarvis, a sophisticated AI assistant. Be helpful, concise, and slightly formal — like a butler with excellent knowledge. Keep responses under 3 sentences unless more detail is specifically requested.";
 
-// WebGPU models: q4f16_1 needs 32KB workgroup — fails on mobile GPUs limited to 16KB
+// q4f32_1 uses 32-bit accumulators but tiny weight tiles — workgroup storage stays ≤16KB.
+// SmolLM2-135M is ~90MB download, works on mobile GPUs that reject all q4f16_1 models.
 const WEBGPU_MODELS = [
-  "Phi-3.5-mini-instruct-q4f16_1-MLC",
-  "SmolLM2-360M-Instruct-q0f16-MLC",
-  "SmolLM2-135M-Instruct-q0f16-MLC",
+  "Phi-3.5-mini-instruct-q4f16_1-MLC",      // Desktop: best quality
+  "SmolLM2-360M-Instruct-q4f16_1-MLC",      // Mid-tier mobile
+  "SmolLM2-135M-Instruct-q4f32_1-MLC",      // Any WebGPU device — ~90MB
 ];
 
-// WASM/CPU model: runs via WebAssembly, no GPU required — works on any device
-const WASM_MODEL = "onnx-community/Qwen2.5-0.5B-Instruct-ONNX";
-
-type UnifiedEngine =
-  | { type: "webgpu"; engine: webllm.MLCEngineInterface }
-  | { type: "wasm"; pipe: (messages: object[], options: object) => Promise<unknown>; tokenizer: unknown };
+const GROQ_API_KEY_STORAGE = "jarvis_groq_api_key";
+const GROQ_MODEL = "llama-3.1-8b-instant";
 
 export function useJarvis() {
   const [state, setState] = useState<AppState>("loading");
@@ -37,14 +34,43 @@ export function useJarvis() {
   const [errorDetails, setErrorDetails] = useState<string | null>(null);
   const [modelId, setModelId] = useState<string>("");
   const [backend, setBackend] = useState<BackendType>(null);
+  const [groqKey, setGroqKeyState] = useState<string>(() =>
+    localStorage.getItem(GROQ_API_KEY_STORAGE) ?? ""
+  );
 
-  const engineRef = useRef<UnifiedEngine | null>(null);
+  const engineRef = useRef<webllm.MLCEngineInterface | null>(null);
+
+  const saveGroqKey = useCallback((key: string) => {
+    if (key) {
+      localStorage.setItem(GROQ_API_KEY_STORAGE, key);
+    } else {
+      localStorage.removeItem(GROQ_API_KEY_STORAGE);
+    }
+    setGroqKeyState(key);
+  }, []);
+
+  // When a groq key is set while in webgpu mode (or vice versa), reinit
+  const switchToGroq = useCallback((key: string) => {
+    saveGroqKey(key);
+    engineRef.current = null;
+    setBackend("groq");
+    setModelId(GROQ_MODEL);
+    setState("idle");
+  }, [saveGroqKey]);
+
+  const switchToOffline = useCallback(() => {
+    engineRef.current = null;
+    setBackend(null);
+    setModelId("");
+    setState("loading");
+  }, []);
 
   useEffect(() => {
     let mounted = true;
 
     async function tryWebGPU(): Promise<boolean> {
-      if (!(navigator as Navigator & { gpu?: unknown }).gpu) return false;
+      const nav = navigator as Navigator & { gpu?: unknown };
+      if (!nav.gpu) return false;
 
       for (const candidate of WEBGPU_MODELS) {
         if (!mounted) return false;
@@ -59,80 +85,37 @@ export function useJarvis() {
             },
           });
           if (mounted) {
-            engineRef.current = { type: "webgpu", engine };
+            engineRef.current = engine;
             setBackend("webgpu");
             setState("idle");
           }
           return true;
         } catch (err) {
-          const msg = err instanceof Error ? err.message : String(err);
-          console.warn(`[Jarvis] WebGPU model ${candidate} failed: ${msg}`);
+          console.warn(`[Jarvis] ${candidate} failed:`, err instanceof Error ? err.message : err);
         }
       }
       return false;
     }
 
-    async function tryWASM(): Promise<boolean> {
-      if (!mounted) return false;
-      try {
+    async function initEngine() {
+      // If groq key is stored, skip offline loading entirely
+      const storedKey = localStorage.getItem(GROQ_API_KEY_STORAGE);
+      if (storedKey) {
         if (mounted) {
-          setModelId(WASM_MODEL);
-          setBackend("wasm");
-          setProgress({ text: "Loading CPU model (no GPU needed)...", progress: 0 });
-        }
-
-        const { pipeline, TextStreamer } = await import("@huggingface/transformers");
-
-        const pipe = await pipeline(
-          "text-generation",
-          WASM_MODEL,
-          {
-            dtype: "q4",
-            device: "wasm",
-            progress_callback: (p: { status: string; file?: string; progress?: number }) => {
-              if (!mounted) return;
-              if (p.status === "progress" && p.file) {
-                setProgress({
-                  text: `Downloading ${p.file}...`,
-                  progress: (p.progress ?? 0) / 100,
-                });
-              } else if (p.status === "done") {
-                setProgress({ text: "Model ready", progress: 1 });
-              }
-            },
-          }
-        );
-
-        if (mounted) {
-          engineRef.current = {
-            type: "wasm",
-            pipe: pipe as (messages: object[], options: object) => Promise<unknown>,
-            tokenizer: (pipe as { tokenizer: unknown }).tokenizer,
-          };
+          setGroqKeyState(storedKey);
+          setModelId(GROQ_MODEL);
+          setBackend("groq");
           setState("idle");
         }
-
-        // Store TextStreamer constructor for later use
-        (engineRef.current as { TextStreamer?: unknown }).TextStreamer = TextStreamer;
-        return true;
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        console.error(`[Jarvis] WASM fallback failed: ${msg}`);
-        return false;
+        return;
       }
-    }
 
-    async function initEngine() {
       const gpuOk = await tryWebGPU();
       if (!gpuOk && mounted) {
-        setProgress({ text: "GPU unavailable — switching to CPU mode...", progress: 0 });
-        const wasmOk = await tryWASM();
-        if (!wasmOk && mounted) {
-          setState("error");
-          setErrorDetails(
-            "Could not initialize the AI engine on this device. Make sure you are using a recent version of Chrome or Safari."
-          );
-        }
+        setState("error");
+        setErrorDetails(
+          "WebGPU is not available on this device. Open Settings and enter a free Groq API key (console.groq.com) to use Jarvis in cloud mode."
+        );
       }
     }
 
@@ -147,7 +130,7 @@ export function useJarvis() {
 
   const sendMessage = useCallback(
     async (content: string) => {
-      if (!engineRef.current || state !== "idle") return;
+      if (state !== "idle") return;
 
       setState("thinking");
       setStreamingResponse("");
@@ -156,13 +139,62 @@ export function useJarvis() {
       const newMessages = [...messages, userMessage];
       setMessages(newMessages);
 
+      const ctx = newMessages.slice(-10);
+
       try {
-        const ctx = newMessages.slice(-10);
         let fullResponse = "";
 
-        if (engineRef.current.type === "webgpu") {
+        if (backend === "groq") {
+          // Groq cloud path — streaming via fetch SSE
           setState("speaking");
-          const stream = await engineRef.current.engine.chat.completions.create({
+          const key = localStorage.getItem(GROQ_API_KEY_STORAGE) ?? groqKey;
+          const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${key}`,
+            },
+            body: JSON.stringify({
+              model: GROQ_MODEL,
+              messages: ctx.map((m) => ({ role: m.role, content: m.content })),
+              stream: true,
+              max_tokens: 512,
+            }),
+          });
+
+          if (!res.ok) {
+            const errText = await res.text();
+            throw new Error(`Groq API error ${res.status}: ${errText}`);
+          }
+
+          const reader = res.body!.getReader();
+          const decoder = new TextDecoder();
+          let buffer = "";
+
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split("\n");
+            buffer = lines.pop() ?? "";
+            for (const line of lines) {
+              if (!line.startsWith("data: ")) continue;
+              const data = line.slice(6).trim();
+              if (data === "[DONE]") break;
+              try {
+                const parsed = JSON.parse(data);
+                const delta = parsed.choices?.[0]?.delta?.content ?? "";
+                fullResponse += delta;
+                setStreamingResponse(fullResponse);
+              } catch {
+                // skip malformed chunks
+              }
+            }
+          }
+        } else if (engineRef.current) {
+          // WebGPU path
+          setState("speaking");
+          const stream = await engineRef.current.chat.completions.create({
             messages: ctx,
             stream: true,
             max_tokens: 512,
@@ -173,31 +205,7 @@ export function useJarvis() {
             setStreamingResponse(fullResponse);
           }
         } else {
-          // WASM path — use TextStreamer for token-by-token output
-          setState("speaking");
-          const { TextStreamer } = await import("@huggingface/transformers");
-          const wasmEngine = engineRef.current;
-
-          const streamer = new TextStreamer(
-            (wasmEngine as { tokenizer: ConstructorParameters<typeof TextStreamer>[0] }).tokenizer,
-            {
-              skip_prompt: true,
-              skip_special_tokens: true,
-              callback_function: (text: string) => {
-                fullResponse += text;
-                setStreamingResponse(fullResponse);
-              },
-            }
-          );
-
-          await wasmEngine.pipe(
-            ctx.map((m) => ({ role: m.role, content: m.content })),
-            {
-              max_new_tokens: 256,
-              streamer,
-              do_sample: false,
-            }
-          );
+          throw new Error("No engine available.");
         }
 
         setMessages([...newMessages, { role: "assistant", content: fullResponse }]);
@@ -205,13 +213,13 @@ export function useJarvis() {
         setState("idle");
         return fullResponse;
       } catch (err: unknown) {
-        console.error("Chat completion error:", err);
+        console.error("Chat error:", err);
         setState("error");
         setErrorDetails(err instanceof Error ? err.message : "Failed to generate response.");
         return null;
       }
     },
-    [messages, state]
+    [messages, state, backend, groqKey]
   );
 
   const clearHistory = useCallback(() => {
@@ -229,7 +237,9 @@ export function useJarvis() {
     sendMessage,
     clearHistory,
     modelId,
-    isMobileModel: backend === "wasm",
     backend,
+    groqKey,
+    switchToGroq,
+    switchToOffline,
   };
 }

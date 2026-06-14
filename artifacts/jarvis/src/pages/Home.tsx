@@ -153,14 +153,17 @@ export default function Home() {
           <span className="w-2 h-2 rounded-full bg-primary animate-pulse" />
           J.A.R.V.I.S. ONLINE
         </div>
-        <SettingsPanel 
-          voiceEnabled={voiceEnabled} 
+        <SettingsPanel
+          voiceEnabled={voiceEnabled}
           setVoiceEnabled={setVoiceEnabled}
           voiceSpeed={voiceSpeed}
           setVoiceSpeed={setVoiceSpeed}
           onClear={jarvis.clearHistory}
           modelId={jarvis.modelId}
-          isMobileModel={jarvis.isMobileModel}
+          backend={jarvis.backend}
+          groqKey={jarvis.groqKey}
+          onGroqKeySave={jarvis.switchToGroq}
+          onSwitchToOffline={jarvis.switchToOffline}
         />
       </header>
 
