@@ -76,8 +76,9 @@ export function useJarvis() {
         const decoder = new TextDecoder();
         let buffer = "";
         let fullResponse = "";
+        let streamDone = false;
 
-        while (true) {
+        while (!streamDone) {
           const { done, value } = await reader.read();
           if (done) break;
           buffer += decoder.decode(value, { stream: true });
@@ -86,7 +87,7 @@ export function useJarvis() {
           for (const line of lines) {
             if (!line.startsWith("data: ")) continue;
             const data = line.slice(6).trim();
-            if (data === "[DONE]") break;
+            if (data === "[DONE]") { streamDone = true; break; }
             try {
               const parsed = JSON.parse(data);
               const delta = parsed.choices?.[0]?.delta?.content ?? "";

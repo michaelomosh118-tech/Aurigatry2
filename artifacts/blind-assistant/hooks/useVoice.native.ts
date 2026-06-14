@@ -18,9 +18,10 @@ export function useVoice() {
     Voice.onSpeechResults = (e: SpeechResultsEvent) => {
       const text = e.value?.[0] ?? "";
       setTranscript(text);
-      if (callbackRef.current && text) {
-        callbackRef.current(text);
+      if (text) {
+        const cb = callbackRef.current;
         callbackRef.current = null;
+        cb?.(text);
       }
       setStatus("idle");
     };

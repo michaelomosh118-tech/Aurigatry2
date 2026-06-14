@@ -3,7 +3,7 @@
 
 import { initLlama, LlamaContext } from "llama.rn";
 import * as FileSystem from "expo-file-system";
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 export type LlamaStatus =
   | "unavailable"
@@ -26,7 +26,8 @@ export function useLlama() {
   const [errorMessage, setErrorMessage] = useState("");
   const contextRef = useRef<LlamaContext | null>(null);
 
-  const documentDirectory: string = (FileSystem as unknown as { documentDirectory: string }).documentDirectory ?? "";
+  const rawDocDir: string = (FileSystem as unknown as { documentDirectory: string }).documentDirectory ?? "";
+  const documentDirectory = rawDocDir.endsWith("/") ? rawDocDir : `${rawDocDir}/`;
   const modelPath = `${documentDirectory}${MODEL_FILENAME}`;
 
   const checkModelExists = useCallback(async (): Promise<boolean> => {
@@ -58,8 +59,18 @@ export function useLlama() {
         setStatus("error");
       }
     },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     []
   );
+
+  useEffect(() => {
+    return () => {
+      if (contextRef.current) {
+        contextRef.current.release().catch(() => null);
+        contextRef.current = null;
+      }
+    };
+  }, []);
 
   const initialize = useCallback(async () => {
     const exists = await checkModelExists();

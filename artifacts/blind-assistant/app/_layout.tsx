@@ -25,9 +25,9 @@ function RootLayoutNav() {
 
 export default function RootLayout() {
   const [fontsLoaded, fontError] = useFonts({
-    DMSans_400Regular,
-    DMSans_500Medium,
-    DMSans_700Bold,
+    "DM_Sans_400Regular": DMSans_400Regular,
+    "DM_Sans_500Medium": DMSans_500Medium,
+    "DM_Sans_700Bold": DMSans_700Bold,
   });
 
   useEffect(() => {

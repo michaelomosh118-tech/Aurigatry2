@@ -16,6 +16,27 @@ import { router } from "expo-router";
 import { useAssistant } from "@/context/AssistantContext";
 import colors from "@/constants/colors";
 
+function showAlert(
+  title: string,
+  message?: string,
+  buttons?: Array<{ text: string; style?: "cancel" | "destructive" | "default"; onPress?: () => void }>
+) {
+  if (Platform.OS === "web") {
+    const destructive = buttons?.find((b) => b.style === "destructive");
+    if (destructive) {
+      if (window.confirm(`${title}${message ? `\n\n${message}` : ""}`)) {
+        destructive.onPress?.();
+      }
+    } else {
+      window.alert(`${title}${message ? `\n\n${message}` : ""}`);
+      const defaultBtn = buttons?.find((b) => b.style !== "cancel");
+      defaultBtn?.onPress?.();
+    }
+  } else {
+    Alert.alert(title, message, buttons);
+  }
+}
+
 const c = colors.light;
 
 const SPEED_OPTIONS = [
@@ -35,11 +56,11 @@ export default function SettingsScreen() {
 
   const handleSaveKey = () => {
     assistant.saveGroqKey(keyInput);
-    Alert.alert("Saved", "Groq API key updated.");
+    showAlert("Saved", "Groq API key updated.");
   };
 
   const handleClearHistory = () => {
-    Alert.alert("Clear History", "Delete all conversation history?", [
+    showAlert("Clear History", "Delete all conversation history?", [
       { text: "Cancel", style: "cancel" },
       {
         text: "Clear",
@@ -53,7 +74,7 @@ export default function SettingsScreen() {
   };
 
   const handleDeleteModel = () => {
-    Alert.alert(
+    showAlert(
       "Delete Model",
       "This will delete the downloaded AI model (~300 MB). You can download it again later.",
       [

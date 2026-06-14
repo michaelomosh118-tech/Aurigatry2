@@ -1,0 +1,2 @@
+- [Blind-assistant bug fixes](blind-assistant-bugs.md) — critical runtime + build bugs found and fixed; key patterns to watch
+- [Font registration pattern](font-registration.md) — useFonts keys must match fontFamily strings in StyleSheet
